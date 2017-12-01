@@ -1,0 +1,19 @@
+
+v2:
+-fuel gauge (MAX17043
+-delete tpl5110 option
+add circuit to detect charging
+
+
+v1:
+-add battery voltage contact
+-add button
+-connected dc to GND(3-wire spi required -> change display jumper BS to 1)
+
+-add tpl5110?
+-Change to Feather M0
+-add PFC8575C to expand boards (LEDs and buttons)
+
+
+
+v0: Initial Release

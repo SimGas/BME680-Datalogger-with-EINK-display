@@ -1,0 +1,17 @@
+safety shutdown for sd card at 0% remaining battery
+implementing menu 
+moving  values into graphs and modify position while playing
+implement alarm and low power mode
+implement 2 different alarms: second match and minute match
+2 different loop routines for 2 different alarms:
+	-taking data
+	-taking data, averaging the last minute's values and write to display
+implement bsec-library with IAQ or similar library(github favourites)
+fix sd detection problem ? 
+Set time <10 sec for first measurement (now.seconds +(10-now.seconds()%10)?
+
+
+
+
+Notes
+Standby mode of processor not possible, Use idle mode with everything deactivated, BME680 draws 0.9mA in low power mode(not ultra low power(t_response=92s!))
