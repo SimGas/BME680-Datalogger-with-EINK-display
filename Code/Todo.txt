@@ -9,7 +9,8 @@ implement 2 different alarms: second match and minute match
 implement bsec-library with IAQ or similar library(github favourites)
 fix sd detection problem ? 
 Set time <10 sec for first measurement (now.seconds +(10-now.seconds()%10)?
-
+better sd file management: check if dayfile exists, don't write header then
+replace all own timestamp routines by rtclib given ones
 
 
 

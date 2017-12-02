@@ -12,7 +12,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 #include "RTClib.h"
-//#define U8G2_16BIT
+#define SD_SCK_MHZ(maxMhz) SPISettings(1000000UL*maxMhz, MSBFIRST, SPI_MODE0)
+#define SPI_DIV3_SPEED SD_SCK_HZ(F_CPU/3)
+//#define U8G2_16BIT // has to be done in U8G2-sourcefile
 #define RST_EINK 12
 #define DC_EINK 6
 #define CS_EINK 10 
@@ -54,9 +56,11 @@ int timetextshift=0;
 String timestring = "123";
 File datafile;
 uint32_t logTime;
-String timestamp = "";
-String filename = "tempdata.csv";
+char timestamp[19] = "20171201;22:30:00";
+char filename[13] = "20171201.csv";
    DateTime now ; //has to be a global variable
+
+
 void setup() {
 
  Serial.begin(115200);
@@ -82,11 +86,11 @@ void setup() {
   rtc.turnOnAlarm(1);
   rtc.turnOnAlarm(2);
   
-if (!SD.begin(CS_SD)) {
+if (!SD.begin(CS_SD, SPI_DIV3_SPEED)) {
     Serial.println("Card failed, or not present");
     warning=1;
     // don't do anything more:
-    return;                 //Don't place any SD-unrelated code below here:#################################################################################################################################################################
+    return;                 //Don't place any SD-unrelated code below here:##############################################################################
   }
   Serial.println("card initialized.");
   createfilename();
@@ -97,10 +101,118 @@ void ISR(){
 interruptflag=1; 
 }
 
+//#########################################################################################################################################################
+//#################################################################### Loops ##############################################################################
+//#########################################################################################################################################################
+
+/*void loop() {
+  now = rtc.now(); //Both loops need clock. now is initialized as global Datetime
+  bool runmeasureloop = rtc.checkIfAlarm(1);
+  bool rundisplayloop = rtc.checkIfAlarm(2);
+    
+    Serial.print(timestamp);
+    Serial.println(" still running");
+    if (runmeasureloop) {
+          Serial.print(timestamp);
+    Serial.print("  ");
+    Serial.println("Sensorloop initiated");
+   int second = now.second();
+   int alarmsecond =0;
+   if (second >= 50){alarmsecond=second-50;}
+   else{alarmsecond = second+10;}
+    rtc.setA1Time(0, 22, 13, alarmsecond, 0b1110, false,false, false);
+    measureloop();
+  }
+  if (rundisplayloop) {
+    Serial.print(timestamp);
+    Serial.print("  ");
+    Serial.println("Displayloop initiated");
+     displayloop();
+  }
+    
+   
+delay(500);
+}*/
+
+
+void loop(){
+now =rtc.now();
+measureloop();
+displayloop();
+delay(2000);
+Serial.println(now.second());
+}
+
+
+//#################################################################### Measure loop ######################################################################
+
+void measureloop(){
+sprintf(timestamp, "%d%02d%02d;%02d:%02d:%02d", now.year(),now.month(),now.day(),now.hour(),now.minute(),now.second());
+vocbuffer.push(random(1,30));
+  float temperature = bme.readTemperature();
+  float humidity = bme.readHumidity();
+  float pressure = (bme.readPressure()/ 100.0F);
+  tbuffer.push(temperature);
+  hbuffer.push(humidity);
+  pbuffer.push(pressure);
+  checkminmax();
+  double measuredvbat = analogRead(VBATPIN);
+measuredvbat *= 2;    // we divided by 2, so multiply back
+measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+measuredvbat /= 1024; // convert to voltage
+  String datastring = timestamp;
+    datastring+= ";";
+    datastring += String(measuredvbat,3);
+    datastring+= ";";
+    datastring+= temperature;
+    datastring+= ";";
+    datastring+= humidity;
+    datastring+= ";";
+    datastring+= pressure;
+//if(warning==1 & digitalRead(SD_CardDetect)){SD.begin();Serial.println("looking for SD-card");}
+if (datafile = SD.open(filename, FILE_WRITE)) {  
+  datafile.println(datastring); //finish and write
+  datafile.close();
+  warning=0;
+  }
+  else {
+    Serial.println("error opening datafile");
+    Serial.print("SD-Error: ");
+//    Serial.println(SD.readError());
+    warning=1;
+  }
+  if (!datafile.sync() || datafile.getWriteError()) {
+    Serial.println("write error");
+    warning=1;
+  }
+}
+//#################################################################### Display loop ######################################################################
+void displayloop(){
+u8g2.setPowerSave(0);
+ u8g2.clearBuffer();         // clear the internal memory
+ u8g2.setDrawColor(not(color));
+ u8g2.drawBox(0,0,296,128);
+ u8g2.setDrawColor(color);
+ drawgraph(75,47,'v');
+ drawgraph(75,87,'t');
+ drawgraph(223,47,'h');
+ drawgraph(223,87,'p');
+ drawvalue(0,10,'t');
+ drawvalue(0,20,'v');
+ drawvalue(0,30,'p');
+ drawvalue(0,40,'h');
+ drawtime();
+ drawdate();
+ drawstatus();
+ u8g2.sendBuffer();         // transfer internal memory to the display
+u8g2.setPowerSave(1); 
+}
+//#########################################################################################################################################################
+//#################################################################### Misc Functions #####################################################################
+//#########################################################################################################################################################
 
 void dateTime(uint16_t* date, uint16_t* time) {
-  DateTime now = rtc.now();
-
+  now = rtc.now();
   // return date using FAT_DATE macro to format fields
   *date = FAT_DATE(now.year(), now.month(), now.day());
   // return time using FAT_TIME macro to format fields
@@ -109,7 +221,7 @@ void dateTime(uint16_t* date, uint16_t* time) {
 
 
 void createfilename(){
-  DateTime now = rtc.now();
+  DateTime now = rtc.now();/*
 filename = String(now.year(),DEC);
 filename += String(now.month()/10,DEC); //just for getting two characters per month: 2/3 -> 02/03
 filename += String(now.month()%10,DEC);
@@ -121,27 +233,16 @@ filename += String(now.minute()/10,DEC);
 filename += String(now.minute()%10,DEC);
 filename += String(now.second()/10,DEC);
 filename += String(now.second()%10,DEC);
-filename += ".csv";
+*/
+sprintf(filename, "%d%02d%02d.csv", now.year(),now.month(),now.day());
 }
+
 void writeheader() {
 DateTime now = rtc.now();
-String datastring = "test";
-datastring = "Temperature Datalog \r\n";
-//datafile.println(datastring);
-datastring += "File created on: ";
-datastring += String(now.month(),DEC);
-datastring += "/";
-datastring += String(now.day(),DEC);
-datastring += "/";
-datastring += String(now.year(),DEC);
-datastring += "  , ";
-datastring += String(now.hour(),DEC);
-datastring += ":";
-datastring += String(now.minute(),DEC);
-datastring += ":";
-datastring += String(now.second(),DEC);
+String datastring = "File creation date:\r\n";
+sprintf(timestamp, "%d%02d%02d;%02d:%02d:%02d", now.year(),now.month(),now.day(),now.hour(),now.minute(),now.second());
+datastring += timestamp;
 datastring += "\r\n";
-
 datastring += "Date;Time;U_Battery;Temperature;Humidity;Pressure";
 SdFile::dateTimeCallback(dateTime);
 datafile = SD.open(filename, FILE_WRITE);
@@ -181,183 +282,42 @@ for (int i=0; i < pbuffer.size(); i++){
   if (maxp-minp < 1){maxp =maxp+0.5;minp=minp-0.5;}
 }
 }
-
-
-
-void measureloop(){
-
-  timestamp = String(now.month(),DEC);
-  timestamp += "/";
-  timestamp += String(now.day(),DEC);
-  timestamp += "/";
-  timestamp += String(now.year(),DEC);
-  timestamp += ";";
-  timestamp += String(now.hour()/10,DEC);
-  timestamp += String(now.hour()%10,DEC);
-  timestamp += ":";
-  timestamp += String(now.minute()/10,DEC);
-  timestamp += String(now.minute()%10,DEC);
-  timestamp += ":";
-  timestamp += String(now.second()/10,DEC);
-  timestamp += String(now.second()%10,DEC);
-
-
-
-  
-vocbuffer.push(random(1,30));
-  float temperature = bme.readTemperature();
-  float humidity = bme.readHumidity();
-  float pressure = (bme.readPressure()/ 100.0F);
-  tbuffer.push(temperature);
-  hbuffer.push(humidity);
-  pbuffer.push(pressure);
-
-  checkminmax();
-  double measuredvbat = analogRead(VBATPIN);
-measuredvbat *= 2;    // we divided by 2, so multiply back
-measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-measuredvbat /= 1024; // convert to voltage
-  String datastring = timestamp;
-    datastring+= ";";
-    datastring += String(measuredvbat,3);
-    datastring+= ";";
-    datastring+= temperature;
-    datastring+= ";";
-    datastring+= humidity;
-    datastring+= ";";
-    datastring+= pressure;
-
-
-if(warning==1 & digitalRead(SD_CardDetect)){SD.begin();Serial.println("looking for SD-card");}
-if (datafile = SD.open(filename, FILE_WRITE)) {  
-  datafile.println(datastring); //finish and write
-  datafile.close();
-  warning=0;
-  }
-  else {
-    Serial.println("error opening datafile");
-    
-    warning=1;
-  }
-  if (!datafile.sync() || datafile.getWriteError()) {
-    Serial.println("write error");
-    
-    warning=1;
-  }
-
-  
-}
-
-void displayloop(){
-u8g2.setPowerSave(0);
- u8g2.clearBuffer();         // clear the internal memory
- u8g2.setDrawColor(not(color));
- u8g2.drawBox(0,0,296,128);
- u8g2.setDrawColor(color);
- drawgraph(75,47,'v');
- drawgraph(75,87,'t');
- drawgraph(223,47,'h');
- drawgraph(223,87,'p');
- drawvalue(0,10,'t');
- drawvalue(0,20,'v');
- drawvalue(0,30,'p');
- drawvalue(0,40,'h');
- drawtime();
- drawdate();
- drawstatus();
- u8g2.sendBuffer();         // transfer internal memory to the display
-u8g2.setPowerSave(1); 
-  
-}
-
-
-
-
-
-void loop() {
-  now = rtc.now(); //Both loops need clock. now is initialized as global Datetime
-  bool runmeasureloop = rtc.checkIfAlarm(1);
-  bool rundisplayloop = rtc.checkIfAlarm(2);
-    
-    Serial.print(timestamp);
-    Serial.println(" still running");
-    if (runmeasureloop) {
-          Serial.print(timestamp);
-    Serial.print("  ");
-    Serial.println("Sensorloop initiated");
-   int second = now.second();
-   int alarmsecond =0;
-   if (second >= 50){alarmsecond=second-50;}
-   else{alarmsecond = second+10;}
-    rtc.setA1Time(0, 22, 13, alarmsecond, 0b1110, false,false, false);
-    measureloop();
-  }
-  if (rundisplayloop) {
-    Serial.print(timestamp);
-    Serial.print("  ");
-    Serial.println("Displayloop initiated");
-     displayloop();
-  }
-    
-   
-delay(500);
-}
-
-
-
-
-
-
+//#########################################################################################################################################################
+//#################################################################### Draw routines ######################################################################
+//#########################################################################################################################################################
 void drawtime(){
-timestring  = String((now.hour()/10), DEC);
-timestring += String(now.hour()%10, DEC);
-timestring += ':';
-timestring += String(now.minute()/10, DEC);
-timestring += String(now.minute()%10, DEC);
-//timestring += ':';
-//timestring += String(now.second()/10, DEC);
-//timestring += String(now.second()%10, DEC);
-
 char timechar[9] ;
-timestring.toCharArray(timechar, 9);
+sprintf(timechar, "%02d:%02d",now.hour(),now.minute());
   u8g2.setFont(u8g2_font_inb24_mf);
  int timex= u8g2.getStrWidth(timechar);
  u8g2.drawStr(148-0.5*timex , 25, timechar);
 }
 
 void drawstatus(){
-  int x = 296-19;
+if (warning==0){u8g2.drawXBM( 296-21-10, 0, sd_10_width, sd_10_height, sd_10_bits);} //draw SD status
+    int x = 296-19;
   int y = 0;
   int batstate =3;
     u8g2.drawFrame(x,y,17,10);
     u8g2.drawLine(295,3,295,6);
     u8g2.drawLine(294,2,294,7);
     
-if (warning==0){u8g2.drawXBM( 296-21-10, 0, sd_10_width, sd_10_height, sd_10_bits);} //draw SD status
-/*  for (int i=0; i < batstate; i++){ // draw little boxes for battery status
-    u8g2.drawBox(x+2+(i*4),y+2,3,6);
-  }*/
-  
+  float measuredvbat = analogRead(VBATPIN);
+  measuredvbat *= 2;    // we divided by 2, so multiply back
+  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+  measuredvbat /= 1024; // convert to voltage
 
-float measuredvbat = analogRead(VBATPIN);
-measuredvbat *= 2;    // we divided by 2, so multiply back
-measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-measuredvbat /= 1024; // convert to voltage
-u8g2.setFont(u8g2_font_5x7_tr);
-
-int batpercentage =0;
+  int batpercentage =0;
 batpercentage = 205.16*measuredvbat-738,35; // conversion to battery percentage. linear approximation done by writing voltage to sd card and do a linear approximation with excel
 if (batpercentage >100){batpercentage=100;}
 else if (batpercentage <0){batpercentage =0;}
-String batpercentagetext = String(batpercentage,DEC);
-int textshift= u8g2.getStrWidth(batpercentagetext.c_str());
+char batpercentagetext[5];
+sprintf(batpercentagetext,"%03d",batpercentage);
+u8g2.setFont(u8g2_font_5x7_tr);
+int textshift= u8g2.getStrWidth(batpercentagetext);
 u8g2.setCursor(296-11-0.5*textshift,y+8); //center text in battery icon
 u8g2.print(batpercentagetext);
-
 }
-
-
-
 
 void drawgraph(int x, int y, char parameter) {
   u8g2.drawLine(x, y, x, y+graph_height); //y-axis

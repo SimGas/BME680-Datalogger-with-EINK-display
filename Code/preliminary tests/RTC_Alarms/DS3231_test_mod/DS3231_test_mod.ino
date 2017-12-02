@@ -33,8 +33,10 @@ void setup() {
     // set A2 to two minutes past, on current day of month.   // Alarm 2 uses first three bit
     //Clock.setA2Time(29, 22, 50, 0b1110000, false, false,false);
     // Turn on both alarms, with external interrupt
-    //Clock.turnOffAlarm(1);
-   // Clock.turnOnAlarm(2);
+    Clock.turnOnAlarm(1);
+    delay(1000);
+    Clock.resetAlarmFlags();
+    Clock.turnOffAlarm(2);
    pinMode(RTC_INT, INPUT_PULLUP);
    attachInterrupt(RTC_INT,inthandler, FALLING);
 }
@@ -92,7 +94,7 @@ void loop() {
 		Serial.print(" O-");
 	}
 	// Indicate whether an alarm went off
-	if (Clock.checkIfAlarm(1)) {
+/*	if (Clock.checkIfAlarm(1)) {
 		Serial.print(" A1!");
    int second = Clock.getSecond();
    int alarmsecond =0;
@@ -102,7 +104,7 @@ void loop() {
 	}
 	if (Clock.checkIfAlarm(2)) {
 		Serial.print(" A2!");
-	}
+	}*/
 	// New line on display
 	Serial.print('\n');
 	// Display Alarm 1 information
