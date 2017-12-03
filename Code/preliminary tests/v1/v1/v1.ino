@@ -9,9 +9,11 @@
 #include <Wire.h>
 #include <SdFat.h>     // SD-Library
 #include <CircularBuffer.h>
-#include <Adafruit_Sensor.h>
+#include <Adafruit_Sensor.h> //bme280 and bme680 libraries depend on it
 #include <Adafruit_BME280.h>
-#include "RTClib.h"
+#include <power.h> // For setting M0 into IDLE mode
+#include <Adafruit_ASFcore.h> //power.h depends on it
+#include "RTClib.h" // my own modified version
 #define SD_SCK_MHZ(maxMhz) SPISettings(1000000UL*maxMhz, MSBFIRST, SPI_MODE0)
 #define SPI_DIV3_SPEED SD_SCK_HZ(F_CPU/3)
 //#define U8G2_16BIT // has to be done in U8G2-sourcefile
@@ -83,9 +85,14 @@ void setup() {
   //rtc.setAlarm1Simple(now.hour(), now.minute(), now.second() + 4);
   rtc.setA1Time(0, 0, 0, 10,0b00001110, false, false, false); /// 1110 means: Alarm, when seconds(10) match
   rtc.setA2Time(0, 0, 0, 0b1110000, false, false, false); //111 mens: Alarm every minute, at second 00
+  
+  rtc.resetAlarmFlags(); //Reset both alarm flags before turning on the WFI routine
   rtc.turnOnAlarm(1);
   rtc.turnOnAlarm(2);
-  
+   pinMode(RTC_INT, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(RTC_INT), InterruptServiceRoutine, FALLING);
+  EIC->WAKEUP.reg |= EIC_WAKEUP_WAKEUPEN8;        // Set External Interrupt Controller to use channel 8 - pin 15
+  system_set_sleepmode(SYSTEM_SLEEPMODE_IDLE_2); // Set Sleepmode to IDLE2, deaktivate most parts of the controller
 if (!SD.begin(CS_SD, SPI_DIV3_SPEED)) {
     Serial.println("Card failed, or not present");
     warning=1;
@@ -97,7 +104,7 @@ if (!SD.begin(CS_SD, SPI_DIV3_SPEED)) {
   writeheader();
 }
 
-void ISR(){
+void InterruptServiceRoutine(){
 interruptflag=1; 
 }
 
@@ -105,7 +112,7 @@ interruptflag=1;
 //#################################################################### Loops ##############################################################################
 //#########################################################################################################################################################
 
-/*void loop() {
+void loop() {
   now = rtc.now(); //Both loops need clock. now is initialized as global Datetime
   bool runmeasureloop = rtc.checkIfAlarm(1);
   bool rundisplayloop = rtc.checkIfAlarm(2);
@@ -129,12 +136,15 @@ interruptflag=1;
     Serial.println("Displayloop initiated");
      displayloop();
   }
-    
-   
-delay(500);
-}*/
+rtc.resetAlarmFlags(); // Reset alarm flags before going into sleep. Better miss one interrupt event than stopping the whole program due to a missed FALLING event
+interruptflag=0;
+while (!(interruptflag)) //Set system back into sleep when not the right interrupt was called. Just a workaround until I found out how to mask the EIC-pints
+{
+ system_sleep();
+}
+}
 
-
+/* //Alternative, simple loop
 void loop(){
 now =rtc.now();
 measureloop();
@@ -142,7 +152,7 @@ displayloop();
 delay(2000);
 Serial.println(now.second());
 }
-
+*/
 
 //#################################################################### Measure loop ######################################################################
 
@@ -177,8 +187,8 @@ if (datafile = SD.open(filename, FILE_WRITE)) {
   }
   else {
     Serial.println("error opening datafile");
-    Serial.print("SD-Error: ");
-//    Serial.println(SD.readError());
+  //  Serial.print("SD-Error: ");
+//    Serial.println(SD.errorCode());
     warning=1;
   }
   if (!datafile.sync() || datafile.getWriteError()) {
@@ -312,7 +322,7 @@ batpercentage = 205.16*measuredvbat-738,35; // conversion to battery percentage.
 if (batpercentage >100){batpercentage=100;}
 else if (batpercentage <0){batpercentage =0;}
 char batpercentagetext[5];
-sprintf(batpercentagetext,"%03d",batpercentage);
+sprintf(batpercentagetext,"%d",batpercentage);
 u8g2.setFont(u8g2_font_5x7_tr);
 int textshift= u8g2.getStrWidth(batpercentagetext);
 u8g2.setCursor(296-11-0.5*textshift,y+8); //center text in battery icon
